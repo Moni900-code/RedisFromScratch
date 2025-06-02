@@ -60,4 +60,4 @@
     ```
   - Starts a fresh server instance.
 
-![alt text](images\image.png)
+![alt text](images/image.png)
