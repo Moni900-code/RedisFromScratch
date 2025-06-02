@@ -1,22 +1,82 @@
+#!/usr/bin/env python3
+"""
+TCP Client for connecting to the SimpleTCPServer
+Supports interactive mode and single command mode
+"""
+
 import socket
+import sys
+import time
 
-HOST = '127.0.0.1'
-PORT = 6379
-
-def start_client():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        print("Connected to server. Type SET key val or GET key.")
+class SimpleTCPClient:
+    def __init__(self, host: str = 'localhost', port: int = 6379):
+        self.host = host
+        self.port = port
+        self.socket = None
+        
+    def connect(self) -> bool:
+        """Connect to the server"""
         try:
-            while True:
-                cmd = input("redis> ")
-                if not cmd:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((self.host, self.port))
+            print(f"Connected to {self.host}:{self.port}")
+            return True
+        except Exception as e:
+            print(f"Connection failed: {e}")
+            return False
+    
+    def send_command(self, command: str) -> str:
+        """Send command and receive response"""
+        try:
+            # Send command
+            self.socket.send((command + '\n').encode('utf-8'))
+            
+            # Receive response
+            response = self.socket.recv(1024).decode('utf-8').strip()
+            return response
+        except Exception as e:
+            return f"ERROR: {e}"
+    
+    def interactive_mode(self):
+        """Run in interactive mode"""
+        print("Interactive mode. Type 'quit' to exit.")
+        print("Supported commands: SET key value, GET keyG")
+        
+        while True:
+            try:
+                command = input(f"{self.host}:{self.port}> ").strip()
+                if not command:
                     continue
-                s.sendall(cmd.encode())
-                data = s.recv(1024)
-                print(data.decode().strip())
-        except KeyboardInterrupt:
-            print("\nExiting.")
+                
+                if command.lower() == 'exit':
+                    break
+                
+                response = self.send_command(command)
+                print(response)
+                
+            except KeyboardInterrupt:
+                print("\nExiting...")
+                break
+            except EOFError:
+                print("\nExiting...")
+                break
+    
+    def close(self):
+        """Close connection"""
+        if self.socket:
+            self.socket.close()
+
+def main():
+    client = SimpleTCPClient()
+    
+    if not client.connect():
+        sys.exit(1)
+    
+    try:
+        # Interactive mode
+        client.interactive_mode()
+    finally:
+        client.close()
 
 if __name__ == "__main__":
-    start_client()
+    main()
