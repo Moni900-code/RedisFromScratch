@@ -61,3 +61,19 @@
   - Starts a fresh server instance.
 
 ![alt text](images/image.png)
+
+This image shows a **single-threaded TCP server** where only **one client is served at a time**:
+
+* In the **left terminal**, `strace` shows the server:
+
+  * Accepts one client (`accept4`)
+  * Handles `SET` and `GET` commands
+  * Only **after** the first client disconnects, it accepts the **next** one
+
+* In the **middle and right terminals**, two clients connect:
+
+  * The **second client (right)** is **blocked** until the **first one (middle)** exits
+
+This proves the server uses a **blocking, single-threaded request-response loop**.
+
+
