@@ -74,6 +74,45 @@ RedisFromScratch/TCP_Server/
 ├── client.py       # client to test server
 
 ```
+**Server side:**
+
+* Uses socket to accept connections from clients and send/receive data.
+
+* Uses SET and GET commands to store data and retrieve it upon requests.
+
+**Client side:**
+
+* Uses socket to connect to the server and send commands.
+
+* Uses SET and GET commands to send data to the server and receive responses.
+
+**Single-threaded part of the code:**
+
+```python
+while True:
+    # Accept connection (blocks until a client connects)
+    client_socket, client_address = self.socket.accept()
+    print(f"Connection from {client_address}")
+    
+    try:
+        # Handle client synchronously (single-threaded)
+        self.handle_client(client_socket)
+    except Exception as e:
+        print(f"Error handling client {client_address}: {e}")
+    finally:
+        client_socket.close()
+        print(f"Connection closed for {client_address}")
+```
+
+---
+
+### Explanation:
+
+* `accept()` **blocks** until a client connects.
+* `handle_client()` is called **directly** (no threading or multiprocessing), so the server processes **only one client at a time**.
+* Until `handle_client()` finishes, the server **does not accept new clients**.
+
+---
 
 ## Process to Test the TCP Server: 
 #### **Step 1: Start the Server**
