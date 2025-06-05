@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Single-threaded TCP Server with Redis-like command processing
-Supports SET and GET commands with basic key-value storage
+Supports SET and GET commands with key expiration (EXPIRE)
 """
 
 import socket
 import sys
+import time
 from typing import Dict, Optional
 
 class SimpleTCPServer:
@@ -13,6 +14,7 @@ class SimpleTCPServer:
         self.host = host
         self.port = port
         self.storage: Dict[str, str] = {}
+        self.expire: Dict[str, float] = {}  # key -> expire timestamp (epoch)
         self.socket = None
         
     def start(self):
@@ -60,6 +62,9 @@ class SimpleTCPServer:
                 
                 print(f"Received: {data}")
                 
+                # Cleanup expired keys on every command
+                self.cleanup_expired_keys()
+                
                 # Process command
                 response = self.process_command(data)
                 
@@ -74,6 +79,15 @@ class SimpleTCPServer:
                 error_response = f"ERROR: {str(e)}"
                 client_socket.send((error_response + '\n').encode('utf-8'))
                 print(f"Error: {e}")
+
+    def cleanup_expired_keys(self):
+        """Remove expired keys"""
+        now = time.time()
+        expired_keys = [k for k, exp in self.expire.items() if exp <= now]
+        for key in expired_keys:
+            print(f"Key expired and removed: {key}")
+            self.storage.pop(key, None)
+            self.expire.pop(key, None)
     
     def process_command(self, command: str) -> str:
         """Process Redis-like commands"""
@@ -91,13 +105,43 @@ class SimpleTCPServer:
             return f"ERROR: Unknown command '{cmd}'"
     
     def handle_set(self, args: list) -> str:
-        """Handle SET key value"""
+        """Handle SET key value [EX seconds]"""
         if len(args) < 2:
             return "ERROR: SET requires key and value"
         
         key = args[0]
-        value = ' '.join(args[1:])  # Support values with spaces
+        value = args[1]
+        
+        # Default expire = None
+        expire_time = None
+        
+        # Check for optional EX param: e.g. SET key value EX 10
+        if len(args) > 2:
+            i = 2
+            while i < len(args):
+                option = args[i].upper()
+                if option == "EX":
+                    i += 1
+                    if i >= len(args):
+                        return "ERROR: EX requires a number"
+                    try:
+                        seconds = int(args[i])
+                        if seconds <= 0:
+                            return "ERROR: EX seconds must be positive"
+                        expire_time = time.time() + seconds
+                    except ValueError:
+                        return "ERROR: EX requires an integer"
+                else:
+                    return f"ERROR: Unknown option '{args[i]}'"
+                i += 1
+        
         self.storage[key] = value
+        if expire_time is not None:
+            self.expire[key] = expire_time
+        elif key in self.expire:
+            # Remove expiration if no EX provided
+            self.expire.pop(key)
+        
         return "OK"
     
     def handle_get(self, args: list) -> str:
@@ -106,9 +150,17 @@ class SimpleTCPServer:
             return "ERROR: GET requires key"
         
         key = args[0]
+        
+        # Check expiration first
+        if key in self.expire:
+            if self.expire[key] <= time.time():
+                # Key expired, delete it
+                self.storage.pop(key, None)
+                self.expire.pop(key, None)
+                return "(nil)"
+        
         value = self.storage.get(key)
         return value if value is not None else "(nil)"
-    
     
     def cleanup(self):
         """Clean up resources"""

@@ -86,31 +86,87 @@ RedisFromScratch/TCP_Server/
 
 * Uses SET and GET commands to send data to the server and receive responses.
 
-**Single-threaded part of the code:**
+
+## **TCP Server Setup**
 
 ```python
-while True:
-    # Accept connection (blocks until a client connects)
-    client_socket, client_address = self.socket.accept()
-    print(f"Connection from {client_address}")
-    
-    try:
-        # Handle client synchronously (single-threaded)
-        self.handle_client(client_socket)
-    except Exception as e:
-        print(f"Error handling client {client_address}: {e}")
-    finally:
-        client_socket.close()
-        print(f"Connection closed for {client_address}")
+self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+self.socket.bind((self.host, self.port))
+self.socket.listen(1)  #single client connection
 ```
+
+### ➤ **Explanation:**
+
+* Initializes a TCP socket server.
+* `SOCK_STREAM` → stream-based (TCP).
+* `bind()` attaches the server to the host and port.
+* `listen(1)` ensures only one client can connect at a time 
 
 ---
 
-### Explanation:
+## **SET Command Logic**
 
-* `accept()` **blocks** until a client connects.
-* `handle_client()` is called **directly** (no threading or multiprocessing), so the server processes **only one client at a time**.
-* Until `handle_client()` finishes, the server **does not accept new clients**.
+```python
+def handle_set(self, args):
+    ...
+    self.storage[key] = value
+```
+
+### ➤ **Explanation:**
+
+* Stores the key-value pair in `self.storage`, which is an in-memory dictionary.
+* Supports optional expiration via `EX` (described below).
+
+---
+
+## **SET with EXPIRE Support**
+
+```python
+if option == "EX":
+    seconds = int(args[i])
+    expire_time = time.time() + seconds
+    self.expire[key] = expire_time
+```
+
+### ➤ **Explanation:**
+
+* When the client issues a command like `SET name John EX 10`, it:
+
+  * Parses `"EX"` and extracts the `seconds`.
+  * Calculates absolute expiration time (`current_time + seconds`).
+  * Stores it in `self.expire[key]`.
+
+---
+
+## **GET Command Logic with Expiration Check**
+
+```python
+if key in self.expire and self.expire[key] <= time.time():
+    self.storage.pop(key)
+    self.expire.pop(key)
+    return "(nil)"
+```
+
+### ➤ **Explanation:**
+
+* Before returning a value, the server checks if the key has expired.
+* If expired:
+
+  * Deletes it from both `storage` and `expire` dicts.
+  * Returns `"(nil)"` (mimicking Redis behavior).
+
+---
+
+## **Expired Key Cleanup (Per Command)**
+
+```python
+self.cleanup_expired_keys()
+```
+
+### ➤ **Explanation:**
+
+* Called before processing every client command.
+* Iterates through `self.expire` and removes keys that have passed their expiration time.
 
 ---
 
@@ -139,9 +195,9 @@ while True:
 - **Run `strace`:**
   - Command:
     ```bash
-    sudo strace -p 38872 -e trace=accept4,recvmsg,sendmsg -tt
+    sudo strace -p 33339 -e trace=accept4,recvmsg,sendmsg,clock_gettime,time -tt
     ```
-  - Traces `accept4` (new connection), `recvmsg` (receive commands), and `sendmsg` (send responses) system calls with timestamps (`-tt`).
+  - Traces `accept4` (new connection), `recvmsg` (receive commands), and `sendmsg` (send responses) system calls with timestamps (`-tt`). `clock_gettime` Used when time.time() or expiration logic captures a timestamp. `time` Used to fetch/check current time (e.g., for key expiration checks).
   - Output shows when the server accepts connections and processes commands, helping confirm blocking behavior.
 
 #### **Step 3: Test with Multiple Clients**
@@ -158,21 +214,28 @@ while True:
 
 **Expected Output**
 
-![alt text](images/image.png)
+![alt text](images/test.png)
 
 This image shows a **single-threaded TCP server** where only **one client is served at a time**:
 
-* In the **left terminal**, `strace` shows the server:
+### strace Terminal:
 
-  * Accepts one client (`accept4`)
-  * Handles `SET` and `GET` commands
-  * Only **after** the first client disconnects, it accepts the **next** one
+* Shows `accept4`, `recvmsg`, `sendmsg`, `clock_gettime`, and `time` calls.
+* Logs client connections, command handling, and key expiration in real time.
 
-* In the **middle and right terminals**, two clients connect:
+### Client 1:
 
-  * The **second client (right)** is **blocked** until the **first one (middle)** exits
+* Runs `SET` and `GET` with and without `EX`.
+* `GET` returns `(nil)` after key expires.
+* Stays connected—blocks server for other clients.
 
-This proves the server uses a **blocking, single-threaded request-response loop**.
+### Client 2:
+
+* Starts during Client 1 session—**blocked**.
+* Only works **after Client 1 exits**.
+
+Confirms server is **single-threaded** and **blocking**, handling one client at a time with correct expiration logic.
+
 
 # **Handle Port Conflicts**
 - **Check if Port 6379 is in Use:**
@@ -194,12 +257,3 @@ This proves the server uses a **blocking, single-threaded request-response loop*
     ```
   - Starts a fresh server instance.
 
-### Drawbacks :
-
-* Can't process multiple clients at the same time.
-
-* Idle Time Waste
-
-* Response time increases if many clients connect
-
-We will learn about these drawbacks in the future.
