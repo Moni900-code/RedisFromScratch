@@ -56,6 +56,35 @@ A single-threaded TCP server:
 - Handles **one client at a time**, blocking others until the current client disconnects.
 - Is simple and efficient for small-scale tasks.
 
+### How a TCP server works 
+
+* **Socket Creation:** The server creates a socket for communication.
+
+* **Binding:** The server binds that socket to a specific IP address and port.
+
+* **Listening:** The server starts listening on that socket for new connections.
+
+* **Accepting Connections:** When a client tries to connect, the server calls `accept()` and creates a new socket dedicated to that client.
+
+* **Communication:** Using the new socket, the server receives data from the client with `recv()` and sends responses back with `send()`.
+
+* **Closing:** When done, the server closes the client socket and goes back to listening for new connections.
+
+---
+
+### Workflow of TCP Request
+
+- The client creates a socket and connects to the server’s IP and port.
+
+- A three-way handshake occurs: SYN → SYN-ACK → ACK.
+
+- Once the connection is established, the client sends requests to the server.
+
+- The server receives data with `recv()`, processes it, and sends back responses.
+
+- This process continues until the connection is closed.
+
+
 ## Workflow Diagram
 
 ![alt text](images/Single_TCP.svg)
