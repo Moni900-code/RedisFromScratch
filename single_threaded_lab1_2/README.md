@@ -297,6 +297,8 @@ def benchmark_mode(self):
 
 ### Step 1: Start the Server
 
+**NOTE** “All test must be done inside the `single_threaded_lab1_2` directory.”
+
 ```bash
 python3 server.py &
 ```
@@ -530,6 +532,144 @@ If port `6379` is already in use:
    ```bash
    python3 server.py &
    ```
+
+
+# Flame Graph Generation & Analysis for Single-Threaded TCP Server
+
+## Prerequisites
+
+Update your system and install `pip` if not already installed:
+
+```bash
+sudo apt update
+sudo apt install python3-pip
+```
+
+
+## Step-by-Step: Generate Flame Graph using `py-spy`
+
+---
+
+### Step 1: Install `py-spy`
+
+Install it using `pip`:
+
+```bash
+pip install py-spy
+```
+
+---
+
+### Step 2: Start TCP Server
+
+Run your server (background execution preferred):
+
+```bash
+python3 server.py &
+```
+
+---
+
+### Step 3: Find the Server's PID
+
+Use `pidof` to find the process ID:
+
+```bash
+pidof python3
+```
+---
+
+### Step 4: Record the Flame Graph
+
+Record a profile of the server using `py-spy`:
+
+```bash
+py-spy record -p <PID> -o profile.svg 
+```
+
+> This generates a `profile.svg` flame graph file based on sampled stack traces.
+
+---
+
+### Step 5: View the Flame Graph
+
+Open the `profile.svg` file by downloading the file.
+
+
+## Sample Flame Graph Analysis (Single-Threaded TCP Server with 5 Clients)
+
+**Output**
+
+![alt text](images/flameGraph.png)
+
+### Flame Graph Key Observations
+
+1. **`<module>` (Line 172)**
+
+   * The main entry point: `SimpleTCPServer().start()`
+
+2. **`start()` Function (Line 36)**
+
+   * The server’s main loop (`while True:`).
+   * Widest and most intense (red) block, indicating high CPU time.
+
+3. **`accept()` Call (Line 40)**
+
+   * Blocking call for incoming connections.
+   * Wide and red → server waits here most of the time.
+   * Indicates idle time due to one-at-a-time connection handling.
+
+4. **`handle_client()` (Line 59)**
+
+   * Processes individual client requests.
+   * Narrower bars (yellow/orange) → executes fast.
+   * Suggests efficient request handling or low workload.
+
+---
+
+## Issues Identified from Flame Graph
+
+---
+
+1. **Single-threaded Model**
+
+   * Only one client is processed at a time.
+   * Other clients are blocked until the current one completes.
+
+2. **Blocking I/O (recv/send)**
+
+   * Slow clients can block the server, reducing throughput.
+
+3. **Inline `cleanup_expired_keys()`**
+
+   * Runs on every request — may become expensive if key count grows.
+   * Not a major issue now, but may degrade performance over time.
+
+---
+
+Of course! Here's your **Flame Graph Summary** in **English**, clearly showing **which part takes more time** and **which part takes less**, based on your analysis:
+
+---
+
+## Flame Graph Summary — Time Consumption Breakdown
+
+| Component                        | Time Consumption | Explanation                                                                                                          |
+| -------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `accept()` (socket.py:292)       | 🟥 Highest       | Blocks while waiting for a new client. Since the server is single-threaded, it can only handle one client at a time. |
+| `start()` (server.py:36/40)      | 🟧 High          | This is the main server loop. It calls `accept()`, so it also appears to take significant time.                      |
+| `handle_client()` (server.py:59) | 🟨 Moderate      | Processes client commands. Takes less time since the client sends few commands or the processing is lightweight.     |
+| `recv()` / `send()`              | 🟩 Low           | Handles data reception/transmission. Minimal time spent due to fewer or smaller messages from the client.            |
+| `cleanup_expired_keys()`         | 🟩 Very Low      | Not much time spent currently since there aren’t many expired keys. Time might increase as the number of keys grows. |
+
+---
+
+### Additional Notes (Not clearly visible in Flame Graph):
+
+* **`recv()` / `send()`**: These happen inside `handle_client()`. Since the graph doesn't break down `handle_client()` further, their time isn't separately visible. If larger data is sent/received, this portion would widen.
+
+* **`cleanup_expired_keys()`**: Also called inside `handle_client()`. Since it doesn't appear distinctly in the graph, it likely takes very little time now. With many expired keys, its time would increase and become more visible.
+
+---
 
 ## Conclusion
 
