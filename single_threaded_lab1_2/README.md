@@ -58,11 +58,11 @@ A single-threaded TCP server:
 
 ## **Single-Threaded TCP Server System Diagram**
 
-![alt text](images/TCPsystemdiagram.png)
+![alt text](images/TCPsystemdiagram.jpg)
 
 ### **1. Client Layer**
 
-* Can connect using Python client, Telnet, Netcat, or any TCP tool
+* Can connect using Python client, or any TCP client
 * Multiple clients **can connect**, but only one is **served at a time** (single-threaded)
 
 
@@ -385,7 +385,7 @@ Sure! Here's the English version of your note:
 
 ---
 
- **Expand the list of traced system calls**
+* **Expand the list of traced system calls**
 
 ```bash
 sudo strace -p 34398 -e trace=network,time -tt
@@ -400,7 +400,7 @@ sudo strace -p 34398 -e trace=network,time -tt
 ![strace Output](images/strace3.png)
 
 
-**System call latency (how much time each call takes):**
+* **System call latency (how much time each call takes):**
 
 ```bash
 sudo strace -T -p <PID>
@@ -411,7 +411,7 @@ sudo strace -T -p <PID>
 
 Shows how many microseconds each system call takes.
 
-**Summary of how many times each call occurred:**
+* **Summary of how many times each call occurred:**
 
 ```bash
 sudo strace -c -p <PID>
@@ -422,7 +422,7 @@ sudo strace -c -p <PID>
 
 Provides a summary report (how many times each syscall was made and what % of total time it consumed).
 
-**Full trace with file operations, memory calls, etc.:**
+* **Full trace with file operations, memory calls, etc.:**
 
 ```bash
 sudo strace -f -tt -v -s 2000 -o full.log -p <PID>
