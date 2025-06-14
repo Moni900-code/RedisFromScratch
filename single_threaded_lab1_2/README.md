@@ -647,10 +647,6 @@ Open the `profile.svg` file by downloading the file.
 
 ---
 
-Of course! Here's your **Flame Graph Summary** in **English**, clearly showing **which part takes more time** and **which part takes less**, based on your analysis:
-
----
-
 ## Flame Graph Summary — Time Consumption Breakdown
 
 | Component                        | Time Consumption | Explanation                                                                                                          |
