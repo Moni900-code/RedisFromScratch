@@ -56,6 +56,53 @@ A single-threaded TCP server:
 - Handles **one client at a time**, blocking others until the current client disconnects.
 - Is simple and efficient for small-scale tasks.
 
+## **Single-Threaded TCP Server System Diagram**
+
+![alt text](images/TCPsystemdiagram.png)
+
+### **1. Client Layer**
+
+* Can connect using Python client, Telnet, Netcat, or any TCP tool
+* Multiple clients **can connect**, but only one is **served at a time** (single-threaded)
+
+
+### **2. Network Layer**
+
+* **TCP/IP Protocol** over port `6379`
+* **Plain text commands**: like `SET key value`, `GET key`
+* One client request is processed at a time (sequential handling)
+
+### **3. TCP Server Core**
+
+#### Socket Server
+
+* `socket()` → creates TCP socket
+* `bind()` & `listen()` → prepares to accept connections
+* `accept()` → accepts a client connection
+
+#### Command Processing
+
+* Parses plain text commands (split by spaces)
+* Handles `SET`, `GET`, `DELETE`
+* Sends responses back to the client
+
+#### Main Loop
+
+```python
+while True:
+    accept() → recv() → parse() → process() → send()
+```
+
+* Sequential and blocking processing
+
+### **4. In-Memory Storage**
+
+* Uses **Python dictionary** to store key-value pairs
+* Supports TTL: expired keys are automatically removed
+* Benchmark mode: tests with large keys and values
+
+---
+
 ### How a TCP server works 
 
 * **Socket Creation:** The server creates a socket for communication.
@@ -283,6 +330,7 @@ python3 server.py &
    - Shows the server’s process ID (e.g., `34398` for `server.py`).
 
 3. **Run `strace`**:
+
    ```bash
    sudo strace -p <PID> -e trace=accept4,recvmsg,sendmsg,clock_gettime,time -tt
    ```
@@ -332,6 +380,55 @@ python3 server.py &
 *  `= 4` — A new file descriptor created for this client. The server will now use this to talk to that client.
 
 This line shows that the server accepted a connection from a local client (127.0.0.1) and is ready to communicate with it using a new socket. 
+
+Sure! Here's the English version of your note:
+
+---
+
+ **Expand the list of traced system calls**
+
+```bash
+sudo strace -p 34398 -e trace=network,time -tt
+```
+
+`trace=network` → Tracks all **network-related** system calls like `accept`, `recv`, `send`, `recvmsg`, `sendmsg`, etc.
+
+`trace=time` → Tracks all **time-related** system calls like `clock_gettime`, `gettimeofday`, `time`, and others.
+
+**Output**
+
+![strace Output](images/strace3.png)
+
+
+**System call latency (how much time each call takes):**
+
+```bash
+sudo strace -T -p <PID>
+```
+**Output**
+
+![strace Output](images/strace2.png)
+
+Shows how many microseconds each system call takes.
+
+**Summary of how many times each call occurred:**
+
+```bash
+sudo strace -c -p <PID>
+```
+**Output**
+
+![strace Output](images/strace1.png)
+
+Provides a summary report (how many times each syscall was made and what % of total time it consumed).
+
+**Full trace with file operations, memory calls, etc.:**
+
+```bash
+sudo strace -f -tt -v -s 2000 -o full.log -p <PID>
+```
+Captures a detailed log of everything (file ops, memory, syscall arguments) into a large log file `full.log`.
+
 
 ### Step 3: Test with Multiple Clients
 
