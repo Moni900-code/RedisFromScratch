@@ -1,72 +1,72 @@
+import sys
+import time
 import socket
-import logging
 
-# Setup client logging
-logging.basicConfig(
-    filename='client_resp.log',
-    filemode='a',
-    format='%(asctime)s | %(message)s',
-    level=logging.DEBUG
-)
-
-def encode_resp(args):
-    resp = f"*{len(args)}\r\n"
-    for arg in args:
-        arg = str(arg)
-        resp += f"${len(arg)}\r\n{arg}\r\n"
-    logging.debug(f"Encoded request: {repr(resp)}")
-    return resp.encode('utf-8')
-
-def decode_resp(data):
-    logging.debug(f"Received raw: {repr(data)}")
-    lines = data.split("\r\n")
-    if not lines:
-        return "(empty)"
-    prefix = lines[0][0]
-    if prefix == '+':
-        return lines[0][1:]
-    elif prefix == '-':
-        return f"ERROR: {lines[0][1:]}"
-    elif prefix == '$':
-        if lines[0] == "$-1":
-            return "nil"
-        if len(lines) > 1:
-            return lines[1]
-        return "(incomplete bulk string)"
-    return data
-
-
-class SimpleRESPClient:
-    def __init__(self, host='localhost', port=6379):
+class SimpleTCPClient:
+    def __init__(self, host: str = 'localhost', port: int = 6379):
         self.host = host
         self.port = port
         self.socket = None
 
-    def connect(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.host, self.port))
-        print(f"Connected to {self.host}:{self.port}")
+    def connect(self) -> bool:
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((self.host, self.port))
+            print(f"Connected to {self.host}:{self.port}")
+            return True
+        except Exception as e:
+            print(f"Connection failed: {e}")
+            return False
 
-    def send_command(self, args):
-        payload = encode_resp(args)
-        self.socket.send(payload)
-        data = self.socket.recv(4096).decode('utf-8')
-        return decode_resp(data)
+    def serialize_command(self, *args: str) -> str:
+        """Serialize command to RESP format"""
+        command = f"*{len(args)}\r\n"
+        for arg in args:
+            command += f"${len(arg)}\r\n{arg}\r\n"
+        return command
+
+    def parse_response(self, response: str) -> str:
+        """Parse RESP response"""
+        if not response:
+            return "ERROR: Empty response"
+        
+        first_char = response[0]
+        if first_char == '+':
+            return response[1:-2]
+        elif first_char == '-':
+            return response[1:-2]
+        elif first_char == '$':
+            if response == "$-1\r\n":
+                return "(nil)"
+            parts = response.split('\r\n')
+            if len(parts) < 2:
+                return "ERROR: Invalid bulk string"
+            return parts[1]
+        else:
+            return f"ERROR: Unknown response format: {response}"
+
+    def send_command(self, *args: str) -> str:
+        try:
+            command = self.serialize_command(*args)
+            self.socket.send(command.encode('utf-8'))
+            response = self.socket.recv(4096).decode('utf-8')
+            return self.parse_response(response)
+        except Exception as e:
+            return f"ERROR: {e}"
 
     def interactive_mode(self):
         print("Interactive mode. Type 'quit' or 'exit' to exit.")
-        print("Supported commands: SET key value, GET key, EXPIRE key seconds, BENCHMARK count")
+        print("Supported commands: SET key value [EX seconds], GET key")
         while True:
             try:
-                cmd = input(f"{self.host}:{self.port}> ").strip()
-                if not cmd:
+                command = input(f"{self.host}:{self.port}> ").strip()
+                if not command:
                     continue
-                if cmd.lower() in ('exit', 'quit'):
+                if command.lower() in ('exit', 'quit'):
                     break
-                args = cmd.split()
-                resp = self.send_command(args)
-        
-                print(resp)
+                args = command.split()
+                response = self.send_command(*args)
+                print(response)
             except (KeyboardInterrupt, EOFError):
                 print("\nExiting...")
                 break
@@ -77,8 +77,8 @@ class SimpleRESPClient:
         def generate_large_data(size_kb):
             return 'x' * (size_kb * 1024)
 
-        key_sizes = [1, 5, 10]         # KB
-        value_sizes = [10, 50, 100]    # KB
+        key_sizes = [1, 5, 10]  # KB
+        value_sizes = [10, 50, 100]  # KB
         repeat = 5
 
         for key_kb in key_sizes:
@@ -92,27 +92,39 @@ class SimpleRESPClient:
                 for _ in range(repeat):
                     # SET
                     start = time.time()
-                    self.send_command(['SET', key, value])
+                    response = self.send_command("SET", key, value)
+                    if response != "OK":
+                        print(f"SET failed: {response}")
                     total_set += (time.time() - start)
 
                     # GET
                     start = time.time()
-                    self.send_command(['GET', key])
+                    response = self.send_command("GET", key)
+                    if response == "(nil)":
+                        print(f"GET failed: Key not found")
                     total_get += (time.time() - start)
 
                 print(f"\n Key: {key_kb}KB | Value: {val_kb}KB | Repeats: {repeat}")
                 print(f"   Avg SET Time: {total_set/repeat:.6f}s")
                 print(f"   Avg GET Time: {total_get/repeat:.6f}s")
 
+    def close(self):
+        if self.socket:
+            self.socket.close()
+
+def main():
+    client = SimpleTCPClient()
+    if not client.connect():
+        sys.exit(1)
+
+    mode = input("Enter mode (interactive/benchmark): ").strip()
+    if mode == "benchmark":
+        client.benchmark_mode()
+    else:
+        try:
+            client.interactive_mode()
+        finally:
+            client.close()
 
 if __name__ == "__main__":
-    client = SimpleRESPClient()
-    client.connect()
-    try:
-        mode = input("Enter mode (interactive/benchmark): ").strip()
-        if mode == "benchmark":
-            client.benchmark_mode()
-        else:
-            client.interactive_mode()
-    finally:
-        client.close()
+    main()
