@@ -141,7 +141,7 @@ RedisFromScratch/TCP_Server/
 
 2. **Process Tracing:** Use **`strace`** or **`ltrace`** to monitor the server’s `recv` and `send` calls and observe command parsing time.
 
-3. **Performance Tuning:** Use **`perf`** to check CPU or memory usage and find opportunities for optimization.
+3. ***Flame Graph**.
 
 ### Terminal 1: Start Server
 ```bash
@@ -512,7 +512,7 @@ write(1, "Connection closed for ('127.0.0.1', 40978)\n", 43) = 43
 
 
 
-## Flame Graph Generation & Analysis
+# 4. Flame Graph Generation & Analysis
 
 ### Prerequisites
 ```bash
@@ -537,7 +537,7 @@ pip install py-spy
    python3 server.py &
    ```
 
-3. **Generate load:**
+ **Generate load:**
 
    ```bash
   python3 -c "import socket, time; 
@@ -551,14 +551,14 @@ pip install py-spy
 
    ```
 
-4. **Profile & generate flamegraph:**
+ **Profile & generate flamegraph:**
 
    ```bash
    py-spy record --format raw -o profile.raw -d 15 -p $(pgrep -f "python3 server.py")
    ./FlameGraph/flamegraph.pl profile.raw > correct_flamegraph.svg
    ```
 
-5. **View in browser:**
+ **View in browser:**
 
    ```bash
    python3 -m http.server 8000
